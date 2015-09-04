@@ -32,11 +32,12 @@ class Card:
       return "%014x" % (self.uid)
 
 class ACNode:
-  def __init__(self, nodeid, servername, port):
+  def __init__(self, nodeid, servername, port, verbose=False):
     self.nodeid = nodeid
     self.servername = servername
     self.port = port
     self.status = 1
+    self.verbose = verbose
 
     ret = self.networkCheckToolStatus()
     if ret != -1:
@@ -81,9 +82,10 @@ class ACNode:
 
 #    print families[c.family], types[c.type], protocols[c.proto]
 
-    print
-    print path
-    print
+    if self.verbose:
+      print
+      print path
+      print
 
     c.send(path)
     c.send(" HTTP/1.0\n")
@@ -137,14 +139,16 @@ class ACNode:
   def querycard(self, card):
     ret = self.get_url("GET /%d/card/%s" % (self.nodeid, card))
 
-    print "Got: %d" % (ret)
+    if self.verbose:
+      print "Got: %d" % (ret)
 
-    if ret == 1 or ret == 2:
-      print "Access granted"
-    elif ret == 0:
-      print "Access denied"
-    else:
-      print "Network or Acserver error"
+    if self.verbose:
+      if ret == 1 or ret == 2:
+        print "Access granted"
+      elif ret == 0:
+        print "Access denied"
+      else:
+        print "Network or Acserver error"
     
     return ret
 
@@ -154,7 +158,8 @@ class ACNode:
     """
     ret = self.get_url("GET /%d/status/" % (self.nodeid))
 
-    print "Status: %d" % (ret)  
+    if self.verbose:
+      print "Status: %d" % (ret)
     
     return ret
 
@@ -164,7 +169,8 @@ class ACNode:
     """
     ret = self.get_url("POST /%ld/status/%d/by/%s" % (self.nodeid, status, card))
 
-    print "Got: %d" % (ret)  
+    if self.verbose:
+      print "Got: %d" % (ret)
     
     return ret
     
@@ -172,11 +178,13 @@ class ACNode:
     """
     https://wiki.london.hackspace.org.uk/view/Project:Tool_Access_Control/Solexious_Proposal#Add_card
     """
-    print "Adding card:"
+    if self.verbose:
+      print "Adding card:"
     # /<nodeid>/grant-to-card/<trainee card uid>/by-card/<maintainer card uid>
     ret = self.get_url("POST /%ld/grant-to-card/%s/by-card/%s" % (self.nodeid, user, maintainer))
 
-    print "Got: %d" % (ret)
+    if self.verbose:
+      print "Got: %d" % (ret)
     
     return ret  
 
@@ -185,11 +193,13 @@ class ACNode:
     https://wiki.london.hackspace.org.uk/view/Project:Tool_Access_Control/Solexious_Proposal#Tool_usage_.28usage_time.29
     is the time here in ms or Seconds?
     """
-    print "Setting tool status:"
+    if self.verbose:
+      print "Setting tool status:"
     # /[nodeID]/tooluse/time/for/[cardID]/[timeUsed]
     ret = self.get_url("POST /%ld/tooluse/time/for/%s/%d" % (self.nodeid, card, time))
 
-    print "Got: %d" % (ret)
+    if self.verbose:
+      print "Got: %d" % (ret)
     
     return ret
 
@@ -197,13 +207,15 @@ class ACNode:
     """
     https://wiki.london.hackspace.org.uk/view/Project:Tool_Access_Control/Solexious_Proposal#Tool_usage_.28live.29
     """
-    print "Setting tool usage:"
+    if self.verbose:
+      print "Setting tool usage:"
 
     # /[nodeID]/tooluse/[status]/[cardID]
 
     ret = self.get_url("POST /%ld/tooluse/%d/%s" % (self.nodeid, status, card))
 
-    print "Got: %d" % (ret)
+    if self.verbose:
+      print "Got: %d" % (ret)
 
     return ret
 
