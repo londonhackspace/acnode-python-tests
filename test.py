@@ -4,12 +4,26 @@ import unittest, MySQLdb, time
 from acnode import ACNode, Card
 
 class AcnodeTests(unittest.TestCase):
+  # user 1 has 2 cards, and is a maintainer
+  user1a = Card(0x00112233445566, False, True)
+  user1b = Card(0xaabbccdd, False, True)
+
+  # a user
+  user2 = Card(0x22222222, False, True)
+
+  # subscribed, but not a user
+  user3 = Card(0x33333333, False, True)
+
+  # exists, but not is not subscribed
+  user4 = Card(0x44444444, False, True)
+
+  user_does_not_exist = Card(0x12345678, False, True)
 
   def setUp(self):
     """
     import users and cards into the db:
     
-    sudo cp carddb.json to /run/carddb.php
+    sudo cp carddb.json /run/carddb.php
     cd /var/www/acserver ; php index.php update_from_carddb
     
     # add a tool
@@ -57,61 +71,64 @@ class AcnodeTests(unittest.TestCase):
     self.failUnless(self.node.networkCheckToolStatus() == 1)
 
   def test_card_not_exists(self):
-    card = Card(0x12345678, False, True)
-    self.failUnless(self.node.querycard(card) == 0)
+    self.failUnless(self.node.querycard(self.user_does_not_exist) == 0)
 
   def test_user(self):
     # card exists and is a user for this tool
-    card = Card(0x22222222, False, True)
-    self.failUnless(self.node.querycard(card) == 1)
+    self.failUnless(self.node.querycard(self.user2) == 1)
 
   def test_user_exists_and_not_user(self):
     # card exists and is not a user for this tool
-    card = Card(0x33333333, False, True)
-    self.failUnless(self.node.querycard(card) == 0)
+    self.failUnless(self.node.querycard(self.user3) == 0)
   
   def test_maintainer(self):
     # is a maintainer for this tool
-    card = Card(0x00112233445566, False, True)
-    self.failUnless(self.node.querycard(card) == 2)
+    self.failUnless(self.node.querycard(self.user1a) == 2)
 
   def test_maintainer_multi_cards(self):
     # is the same maintainer
-    card = Card(0xaabbccdd, False, True)
-    self.failUnless(self.node.querycard(card) == 2)
+    self.failUnless(self.node.querycard(self.user1b) == 2)
 
   def test_adduser(self):
     # now the maintainer gives user id 3 permission to use the tool
-    user = Card(0x33333333, False, True)
-    maintainer = Card(0xaabbccdd, False, True)
-    assert(self.node.addNewUser(user, maintainer) == 1)
+    self.failUnless(self.node.addNewUser(self.user3, self.user1a) == 1)
     # and now they can use the tool
-    self.failUnless(self.node.querycard(user) == 1)
+    self.failUnless(self.node.querycard(self.user3) == 1)
+
+  def test_add_unknown(self):
+    # maintainer add unknown card
+    self.failUnless(self.node.addNewUser(self.user_does_not_exist, self.user1a) == 0)
+
+  def test_add_unsubscribed(self):
+    # maintainer adds known, unsubscribed card
+    self.failUnless(self.node.addNewUser(self.user4, self.user1a) == 0)
+
+  def test_non_maintainer_add(self):
+    # know user tries to add a card
+    self.failUnless(self.node.addNewUser(self.user3, self.user2) == 0)
+
+  def test_unknown_user_adds_a_card(self):
+    # unknown user tries to add a card
+    self.failUnless(self.node.addNewUser(self.user3, self.user_does_not_exist) == 0)
 
   def test_using_acnode(self):
-    # so they start using it  
-    card = Card(0x33333333, False, True)
-    assert(self.node.reportToolUse(card, 1) == 1)
+    self.failUnless(self.node.reportToolUse(self.user2, 1) == 1)
     # and stop after 5 seconds
     time.sleep(5)
-    ret = self.node.toolUseTime(card, 5)
-    self.node.reportToolUse(card, 0)
-    self.failUnless(ret == 1)
+    self.failUnless(self.node.toolUseTime(self.user2, 5) == 1)
+    self.failUnless(self.node.reportToolUse(self.user2, 0) == 1)
 
   def test_set_offline(self):
-    card = Card(0x33333333, False, True)
-    # and then takes the tool offline
-    self.failUnless(self.node.setToolStatus(0, card) == 1)
+    # take the tool offline
+    self.failUnless(self.node.setToolStatus(0, self.user2) == 1)
   
-  def test_now_offline(self):
-    # should be offline now
-    user = Card(0x33333333, False, True)
-    maintainer = Card(0xaabbccdd, False, True)
-    assert(self.node.addNewUser(user, maintainer) == 1)
-    # and now they can use the tool
-    assert(self.node.querycard(user) == 1)
-    # take the tool out of service
-    assert(self.node.setToolStatus(0, user) == 1)
+  def test_new_user_put_offline(self):
+    # let them use the tool
+    self.failUnless(self.node.addNewUser(self.user3, self.user1a) == 1)
+    # check that they can use it
+    self.failUnless(self.node.querycard(self.user3) == 1)
+    # and take the tool out of service
+    self.failUnless(self.node.setToolStatus(0, self.user3) == 1)
     # and we should be out of service now
     self.failUnless(self.node.networkCheckToolStatus() == 0)
 
@@ -123,7 +140,8 @@ class AcnodeTests(unittest.TestCase):
     self.failUnless(node.querycard(card) == -1)
 
 if __name__ == '__main__':
-  suite = unittest.TestLoader().loadTestsFromTestCase(AcnodeTests)
-  unittest.TextTestRunner(verbosity=2).run(suite)
+  unittest.main()
+#  suite = unittest.TestLoader().loadTestsFromTestCase(AcnodeTests)
+#  unittest.TextTestRunner(verbosity=2).run(suite)
 
-#  unittest.main()
+
