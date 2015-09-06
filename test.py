@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-import unittest, MySQLdb, time
+import unittest, MySQLdb, time, urllib2, json
 from acnode import ACNode, Card
 
 class AcnodeTests(unittest.TestCase):
@@ -122,6 +122,14 @@ class AcnodeTests(unittest.TestCase):
     # take the tool offline
     self.failUnless(self.node.setToolStatus(0, self.user2) == 1)
   
+  def test_unknown_set_offline(self):
+    # only known users can take a tool offline
+    self.failUnless(self.node.setToolStatus(0, self.user_does_not_exist) == 0)
+
+  def test_not_user_set_offline(self):
+    # known but not a user
+    self.failUnless(self.node.setToolStatus(0, self.user3) == 1)
+
   def test_new_user_put_offline(self):
     # let them use the tool
     self.failUnless(self.node.addNewUser(self.user3, self.user1a) == 1)
@@ -138,6 +146,99 @@ class AcnodeTests(unittest.TestCase):
     node = ACNode(42, "localhost", 1234)
     # this test fails atm, it's not a big deal tho.
     self.failUnless(node.querycard(card) == -1)
+
+  def test_toolisinuse(self):
+    # not called by the acnodes, but by things monitoring them.
+    # start using the tool
+    self.failUnless(self.node.reportToolUse(self.user2, 1) == 1)
+    response = urllib2.urlopen(("http://%s:%d/%d/is_tool_in_use" % (self.node.servername, self.node.port, self.node.nodeid)))
+    self.failUnless(response.read() == "yes")
+
+    # if the tool starts and stops in the same second then this fails
+    time.sleep(1)
+
+    # and stop
+    self.failUnless(self.node.reportToolUse(self.user2, 0) == 1)
+
+    response = urllib2.urlopen("http://%s:%d/%d/is_tool_in_use" % (self.node.servername, self.node.port, self.node.nodeid))
+    ret = response.read()
+    # this fails if the tool is used for less than a second actual bug?
+    self.failUnless(ret == "no")
+
+  # apikey tests
+  # API-KEY: 'KEY GOES HERE'
+  # check what turing actually uses.
+  def test_get_tools_for_user(self):
+    # get_tools_for_user
+    # GET /api/get_tools_for_user/
+    req = urllib2.Request("http://%s:%d/api/get_tools_for_user/%d" %
+      (self.node.servername, self.node.port, 1),
+      headers={'API-KEY': 'KEY GOES HERE'})
+    response = urllib2.urlopen(req)
+    ret = response.read()
+#    print ret
+    ret = json.loads(ret)
+    self.failUnless(ret[0]['permission'] == 'maintainer')
+
+  def test_get_tools_for_user_does_not_exist(self):
+    # get_tools_for_user
+    # GET /api/get_tools_for_user/
+    req = urllib2.Request("http://%s:%d/api/get_tools_for_user/%d" %
+      (self.node.servername, self.node.port, 42),
+      headers={'API-KEY': 'KEY GOES HERE'})
+    response = urllib2.urlopen(req)
+    ret = response.read()
+    print ret
+    ret = json.loads(ret)
+    self.failUnless(ret[0]['permission'] == 'maintainer')
+
+  def test_gets_tools_for_user_with_wrong_key(self):
+    # get_tools_for_user with wrong api key
+    # GET /api/get_tools_for_user/
+    req = urllib2.Request("http://%s:%d/api/get_tools_for_user/%d" %
+      (self.node.servername, self.node.port, 1),
+      headers={'API-KEY': 'abcdefgh'})
+    try:
+      response = urllib2.urlopen(req)
+      ret = json.loads(response.read())
+      print ret
+      self.failUnless(ret == "something")
+    except urllib2.HTTPError, e:
+      self.failUnless(str(e) == 'HTTP Error 401: Forbidden')
+
+  def test_get_tools_summary_for_user(self):
+    # get_tools_summary_for_user
+    # "/api/get_tools_summary_for_user/%d" % (2)
+    req = urllib2.Request("http://%s:%d/api/get_tools_summary_for_user/%d" %
+      (self.node.servername, self.node.port, 1),
+      headers={'API-KEY': 'KEY GOES HERE'})
+    response = urllib2.urlopen(req)
+    ret = json.loads(response.read())
+    self.failUnless(ret[0]['permission'] == 'maintainer')
+
+  def test_get_tools_summary_for_user_does_not_exist(self):
+    # get_tools_summary_for_user for user who does not exist
+    # "/api/get_tools_summary_for_user/%d" % (2)
+    req = urllib2.Request("http://%s:%d/api/get_tools_summary_for_user/%d" %
+      (self.node.servername, self.node.port, 42),
+      headers={'API-KEY': 'KEY GOES HERE'})
+    response = urllib2.urlopen(req)
+    ret = json.loads(response.read())
+    self.failUnless(ret[0]['permission'] == 'un-authorised')
+
+  def test_get_tools_summary_for_user_wrong_api_key(self):
+    # get_tools_summary_for_user with wrong api key
+    # "/api/get_tools_summary_for_user/%d" % (2)
+    req = urllib2.Request("http://%s:%d/api/get_tools_summary_for_user/%d" %
+      (self.node.servername, self.node.port, 42),
+      headers={'API-KEY': 'udlrabss'})
+    try:
+      response = urllib2.urlopen(req)
+      ret = json.loads(response.read())
+      print ret
+      self.failUnless(ret == "something")
+    except urllib2.HTTPError, e:
+      self.failUnless(str(e) == 'HTTP Error 401: Forbidden')
 
 if __name__ == '__main__':
   unittest.main()
