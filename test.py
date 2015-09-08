@@ -167,45 +167,6 @@ class AcnodeTests(unittest.TestCase):
 
   # apikey tests
   # API-KEY: 'KEY GOES HERE'
-  # check what turing actually uses.
-  def test_get_tools_for_user(self):
-    # get_tools_for_user
-    # GET /api/get_tools_for_user/
-    req = urllib2.Request("http://%s:%d/api/get_tools_for_user/%d" %
-      (self.node.servername, self.node.port, 1),
-      headers={'API-KEY': 'KEY GOES HERE'})
-    response = urllib2.urlopen(req)
-    ret = response.read()
-#    print ret
-    ret = json.loads(ret)
-    self.failUnless(ret[0]['permission'] == 'maintainer')
-
-  def test_get_tools_for_user_does_not_exist(self):
-    # get_tools_for_user
-    # GET /api/get_tools_for_user/
-    req = urllib2.Request("http://%s:%d/api/get_tools_for_user/%d" %
-      (self.node.servername, self.node.port, 42),
-      headers={'API-KEY': 'KEY GOES HERE'})
-    response = urllib2.urlopen(req)
-    ret = response.read()
-    print ret
-    ret = json.loads(ret)
-    self.failUnless(ret[0]['permission'] == 'maintainer')
-
-  def test_gets_tools_for_user_with_wrong_key(self):
-    # get_tools_for_user with wrong api key
-    # GET /api/get_tools_for_user/
-    req = urllib2.Request("http://%s:%d/api/get_tools_for_user/%d" %
-      (self.node.servername, self.node.port, 1),
-      headers={'API-KEY': 'abcdefgh'})
-    try:
-      response = urllib2.urlopen(req)
-      ret = json.loads(response.read())
-      print ret
-      self.failUnless(ret == "something")
-    except urllib2.HTTPError, e:
-      self.failUnless(str(e) == 'HTTP Error 401: Forbidden')
-
   def test_get_tools_summary_for_user(self):
     # get_tools_summary_for_user
     # "/api/get_tools_summary_for_user/%d" % (2)
