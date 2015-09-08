@@ -70,6 +70,11 @@ class AcnodeTests(unittest.TestCase):
     # should be online now
     self.failUnless(self.node.networkCheckToolStatus() == 1)
 
+  def test_online_tool_does_not_exist(self):
+    # test with an unknown tool_id
+    node = ACNode(123, "localhost", 1234)
+    self.failUnless(node.networkCheckToolStatus() == -1)
+
   def test_card_not_exists(self):
     self.failUnless(self.node.querycard(self.user_does_not_exist) == 0)
 
