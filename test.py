@@ -187,6 +187,30 @@ class AcnodeTests(unittest.TestCase):
     ret = json.loads(response.read())
     self.failUnless(ret[0]['permission'] == 'un-authorised')
 
+  def test_get_tools_summary_for_user_adding_user(self):
+    # get_tools_summary_for_user for user who is not authorised, and
+    # then add them, then test again
+    # "/api/get_tools_summary_for_user/%d" % (2)
+    req = urllib2.Request("http://%s:%d/api/get_tools_summary_for_user/%d" %
+      (self.node.servername, self.node.port, 3),
+      headers={'API-KEY': 'KEY GOES HERE'})
+    response = urllib2.urlopen(req)
+    ret = json.loads(response.read())
+    self.failUnless(ret[0]['permission'] == 'un-authorised')
+
+    # add user 3 as a user
+    self.failUnless(self.node.addNewUser(self.user3, self.user1a) == 1)
+    # and now they can use the tool
+    self.failUnless(self.node.querycard(self.user3) == 1)
+
+    # now check they can use the tool
+    req = urllib2.Request("http://%s:%d/api/get_tools_summary_for_user/%d" %
+      (self.node.servername, self.node.port, 3),
+      headers={'API-KEY': 'KEY GOES HERE'})
+    response = urllib2.urlopen(req)
+    ret = json.loads(response.read())
+    self.failUnless(ret[0]['permission'] == 'user')
+
   def test_get_tools_summary_for_user_wrong_api_key(self):
     # get_tools_summary_for_user with wrong api key
     # "/api/get_tools_summary_for_user/%d" % (2)
