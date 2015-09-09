@@ -77,7 +77,7 @@ class AcnodeTests(unittest.TestCase):
     self.failUnless(node.networkCheckToolStatus() == -1)
 
   def test_card_not_exists(self):
-    self.failUnless(self.node.querycard(self.user_does_not_exist) == 0)
+    self.failUnless(self.node.querycard(self.user_does_not_exist) == -1)
 
   def test_user(self):
     # card exists and is a user for this tool
