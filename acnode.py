@@ -97,9 +97,6 @@ class ACNode:
     c.setblocking(0)
     c.settimeout(10.0)
 
-    res = ""
-
-    newlines = 0
     first = False
     done = False
     while not done:
@@ -114,26 +111,14 @@ class ACNode:
         done = True
         break
 
-      for ch in data:
-        res += ch
-        if ch == '\n':
-          newlines += 1
-        else:
-          if ch != '\r':
-            newlines = 0
-        if first:
-#          print ">>>", ch, "<<<"
-          if ch.isdigit():
-            result = ord(ch) - ord('0')
-          done = True
-          break
-        if newlines == 2:
-          first = True
+      lines = data.split("\r\n")
+      try:
+        result = int(lines[-1])
+      except ValueError:
+        pass
 
     c.close()
 
-#    print res
-    
     return result
 
   def querycard(self, card):
