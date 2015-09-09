@@ -2,6 +2,7 @@
 
 import unittest, MySQLdb, time, urllib2, json
 from acnode import ACNode, Card
+import test_config
 
 class AcnodeTests(unittest.TestCase):
   # user 1 has 2 cards, and is a maintainer
@@ -39,10 +40,10 @@ class AcnodeTests(unittest.TestCase):
     insert into permissions (tool_id, user_id, permission) VALUES (1, 1, 2);
     
     """
-    db = MySQLdb.connect(host="localhost",
-                         user="acserver",
-                         passwd="acserverzz",
-                         db="acserver")
+    db = MySQLdb.connect(host=test_config.MYSQL_HOST,
+                         user=test_config.MYSQL_USER,
+                         passwd=test_config.MYSQL_PASS,
+                         db=test_config.MYSQL_DB)
     cur = db.cursor()
     cur.execute("DELETE FROM permissions;")
     cur.execute("DELETE FROM acnodes;")
@@ -64,7 +65,7 @@ class AcnodeTests(unittest.TestCase):
     db.commit()
     db.close()
 
-    self.node = ACNode(1, "localhost", 1234)
+    self.node = ACNode(1, test_config.ACNODE_ACSERVER_HOST, test_config.ACNODE_ACSERVER_PORT)
 
   def test_online(self):
     # should be online now
@@ -72,7 +73,7 @@ class AcnodeTests(unittest.TestCase):
 
   def test_online_tool_does_not_exist(self):
     # test with an unknown tool_id
-    node = ACNode(123, "localhost", 1234)
+    node = ACNode(123, test_config.ACNODE_ACSERVER_HOST, test_config.ACNODE_ACSERVER_PORT)
     self.failUnless(node.networkCheckToolStatus() == -1)
 
   def test_card_not_exists(self):
@@ -148,7 +149,7 @@ class AcnodeTests(unittest.TestCase):
   def test_error(self):
     card = Card(0x00000000, False, True)
     # acnode does not exist
-    node = ACNode(42, "localhost", 1234)
+    node = ACNode(42, test_config.ACNODE_ACSERVER_HOST, test_config.ACNODE_ACSERVER_PORT)
     # this test fails atm, it's not a big deal tho.
     self.failUnless(node.querycard(card) == -1)
 
