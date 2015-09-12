@@ -231,6 +231,17 @@ class AcnodeTests(unittest.TestCase):
     except urllib2.HTTPError, e:
       self.failUnless(str(e) == 'HTTP Error 401: Forbidden')
 
+  def test_whois_known_card(self):
+    # whois for a known card returns user id, to be announced via irc
+    req = urllib2.Request("http://%s:%d/api/whois/%s" % (self.node.servername, self.node.port, self.user2))
+    try:
+      response = urllib2.urlopen(req)
+      lines = response.read().split("\r\n")
+      self.failUnless(lines[0] == "test2")
+      self.failUnless(lines[1] == "22222222")
+    except urllib2.HTTPError, e:
+      self.failUnless(str(e) == 'HTTP Error 401: Forbidden')
+
 if __name__ == '__main__':
   unittest.main()
 #  suite = unittest.TestLoader().loadTestsFromTestCase(AcnodeTests)

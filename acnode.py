@@ -204,6 +204,16 @@ class ACNode:
 
     return ret
 
+  def whois(self, card):
+    if self.verbose:
+      print "Getting nick for card:"
+
+    ret = self.get_url("GET /api/whois/%s" % (ret))
+    if self.verbose:
+      print "Got: %s" % (ret)
+
+    return ret
+
 if __name__ == "__main__":
   node = ACNode(1, "localhost", 1234)
 
