@@ -97,6 +97,9 @@ class ACNode:
     c.setblocking(0)
     c.settimeout(10.0)
 
+    res = ""
+
+    newlines = 0
     first = False
     done = False
     while not done:
@@ -111,14 +114,26 @@ class ACNode:
         done = True
         break
 
-      lines = data.split("\r\n")
-      try:
-        result = int(lines[-1])
-      except ValueError:
-        pass
+      for ch in data:
+        res += ch
+        if ch == '\n':
+          newlines += 1
+        else:
+          if ch != '\r':
+            newlines = 0
+        if first:
+#          print ">>>", ch, "<<<"
+          if ch.isdigit():
+            result = ord(ch) - ord('0')
+          done = True
+          break
+        if newlines == 2:
+          first = True
 
     c.close()
 
+#    print res
+    
     return result
 
   def querycard(self, card):
@@ -201,16 +216,6 @@ class ACNode:
 
     if self.verbose:
       print "Got: %d" % (ret)
-
-    return ret
-
-  def whois(self, card):
-    if self.verbose:
-      print "Getting nick for card:"
-
-    ret = self.get_url("GET /api/whois/%s" % (ret))
-    if self.verbose:
-      print "Got: %s" % (ret)
 
     return ret
 
