@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-import unittest, MySQLdb, time, urllib2, json
+import unittest, MySQLdb, time, urllib2, json, os, sys
 from acnode import ACNode, Card
 import test_config
 
@@ -40,30 +40,92 @@ class AcnodeTests(unittest.TestCase):
     insert into permissions (tool_id, user_id, permission) VALUES (1, 1, 2);
     
     """
-    db = MySQLdb.connect(host=test_config.MYSQL_HOST,
-                         user=test_config.MYSQL_USER,
-                         passwd=test_config.MYSQL_PASS,
-                         db=test_config.MYSQL_DB)
-    cur = db.cursor()
-    cur.execute("DELETE FROM permissions;")
-    cur.execute("DELETE FROM acnodes;")
-    cur.execute("DELETE FROM toolusage;")    
-    cur.execute("DELETE FROM tools;")
+    if test_config.TESTMODE == "php":
+      db = MySQLdb.connect(host=test_config.MYSQL_HOST,
+                           user=test_config.MYSQL_USER,
+                           passwd=test_config.MYSQL_PASS,
+                           db=test_config.MYSQL_DB)
+      cur = db.cursor()
+      cur.execute("DELETE FROM permissions;")
+      cur.execute("DELETE FROM acnodes;")
+      cur.execute("DELETE FROM toolusage;")
+      cur.execute("DELETE FROM tools;")
 
-    # we need a tool to test with
-    cur.execute("insert into tools (tool_id, name, status, status_message) VALUES (1, 'test_tool', 1, 'working ok');")
+      # we need a tool to test with
+      cur.execute("insert into tools (tool_id, name, status, status_message) VALUES (1, 'test_tool', 1, 'working ok');")
+      # and to test the api a bit better lets have a 2nd
+      cur.execute("insert into tools (tool_id, name, status, status_message) VALUES (2, 'other test tool', 0, 'Out of action');")
 
-    # and now an acnode for our tool
-    cur.execute("insert into acnodes (acnode_id, unique_identifier, shared_secret, tool_id) VALUES (1, '1', '1', 1);")
+      # and now an acnode for our tool
+      cur.execute("insert into acnodes (acnode_id, unique_identifier, shared_secret, tool_id) VALUES (1, '1', '1', 1);")
 
-    # make user 2 a user for this tool
-    cur.execute("insert into permissions (tool_id, user_id, permission, added_on) VALUES (1, 2, 1, NOW());")
+      # make user 2 a user for this tool
+      cur.execute("insert into permissions (tool_id, user_id, permission, added_on) VALUES (1, 2, 1, NOW());")
     
-    # make user 1 a maintainer for this tool
-    cur.execute("insert into permissions (tool_id, user_id, permission, added_on) VALUES (1, 1, 2, NOW());")
-    
-    db.commit()
-    db.close()
+      # make user 1 a maintainer for this tool
+      cur.execute("insert into permissions (tool_id, user_id, permission, added_on) VALUES (1, 1, 2, NOW());")
+
+      # make the android tag a user
+      cur.execute("insert into permissions (tool_id, user_id, permission, added_on) VALUES (1, 8, 1, NOW());")
+
+      # make the temp card a maintainer
+      cur.execute("insert into permissions (tool_id, user_id, permission, added_on) VALUES (1, 5, 2, NOW());")
+
+      db.commit()
+      db.close()
+    elif test_config.TESTMODE == "django":
+      os.environ['DJANGO_SETTINGS_MODULE'] = 'acserver.settings'
+      import django
+      if os.path.exists(os.path.dirname(os.path.dirname(os.path.abspath(__file__))) + os.path.sep + "acserver-django" ):
+        sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))) + os.path.sep + "acserver-django")
+      else:
+        if test_config.ACNODE_ACSERVER_DJANGO:
+          sys.path.append(test_config.ACNODE_ACSERVER_DJANGO)
+        else:
+          raise RunTimeException("you need to put acserver-django on your python path somehow, bodge this here.")
+      from server.models import Tool, Card, User, Permissions
+      from django.core.exceptions import ObjectDoesNotExist
+
+      django.setup()
+      try:
+        t = Tool.objects.get(id=1)
+        t.delete()
+        t = None
+      except ObjectDoesNotExist, e:
+        pass
+
+      try:
+        t = Tool.objects.get(id=2)
+        t.delete()
+        t = None
+      except ObjectDoesNotExist, e:
+        pass
+
+      t = Tool(id=1, name='test_tool', status=1, status_message='working ok')
+      t.save()
+
+      t = Tool(id=2, name='other test tool', status=0, status_message='Out of action')
+      t.save()
+
+      # clean permissions first
+      ps = Permissions.objects.all()
+      for p in ps:
+        p.delete()
+        p = None
+
+      # user 2 is a user
+      p = Permissions(user=User.objects.get(pk=2), permission=1, tool=Tool.objects.get(pk=1))
+      p.save()
+      # user 1 is a maintainer
+      p = Permissions(user=User.objects.get(pk=1), permission=2, tool=Tool.objects.get(pk=1))
+      p.save()
+      # make the android tag a user
+      p = Permissions(user=User.objects.get(pk=8), permission=1, tool=Tool.objects.get(pk=1))
+      p.save()
+
+      # make the temp card a maintainer
+      p = Permissions(user=User.objects.get(pk=5), permission=2, tool=Tool.objects.get(pk=1))
+      p.save()
 
     self.node = ACNode(1, test_config.ACNODE_ACSERVER_HOST, test_config.ACNODE_ACSERVER_PORT)
 
@@ -146,6 +208,12 @@ class AcnodeTests(unittest.TestCase):
     # and we should be out of service now
     self.failUnless(self.node.networkCheckToolStatus() == 0)
 
+  def test_non_maintainer_set_online(self):
+    # take the tool offline
+    self.failUnless(self.node.setToolStatus(0, self.user2) == 1)
+    # non maintainer putting online
+    self.failUnless(self.node.setToolStatus(1, self.user2) == 0)
+
   def test_error(self):
     card = Card(0x00000000, False, True)
     # acnode does not exist
@@ -183,6 +251,20 @@ class AcnodeTests(unittest.TestCase):
     ret = json.loads(response.read())
     self.failUnless(ret[0]['permission'] == 'maintainer')
 
+  def test_get_tools_summary_for_user_toolstuff(self):
+    # get_tools_summary_for_user
+    # "/api/get_tools_summary_for_user/%d" % (2)
+    req = urllib2.Request("http://%s:%d/api/get_tools_summary_for_user/%d" %
+      (self.node.servername, self.node.port, 1),
+      headers={'API-KEY': 'KEY GOES HERE'})
+    response = urllib2.urlopen(req)
+    ret = json.loads(response.read())
+    self.failUnless(ret[0]['permission'] == 'maintainer')
+    self.failUnless(ret[0]['status'] == 'Operational')
+    self.failUnless(ret[0]['status_message'] == 'working ok')
+    self.failUnless(ret[0]['name'] == 'test_tool')
+    self.failUnless(ret[0]['in_use'] == 'no')
+
   def test_get_tools_summary_for_user_does_not_exist(self):
     # get_tools_summary_for_user for user who does not exist
     # "/api/get_tools_summary_for_user/%d" % (2)
@@ -192,6 +274,7 @@ class AcnodeTests(unittest.TestCase):
     response = urllib2.urlopen(req)
     ret = json.loads(response.read())
     self.failUnless(ret[0]['permission'] == 'un-authorised')
+    self.failUnless(ret[1]['permission'] == 'un-authorised')
 
   def test_get_tools_summary_for_user_adding_user(self):
     # get_tools_summary_for_user for user who is not authorised, and
@@ -229,11 +312,9 @@ class AcnodeTests(unittest.TestCase):
       print ret
       self.failUnless(ret == "something")
     except urllib2.HTTPError, e:
-      self.failUnless(str(e) == 'HTTP Error 401: Forbidden')
+      self.failUnless(str(e).startswith('HTTP Error 401'))
 
 if __name__ == '__main__':
   unittest.main()
 #  suite = unittest.TestLoader().loadTestsFromTestCase(AcnodeTests)
 #  unittest.TextTestRunner(verbosity=2).run(suite)
-
-
