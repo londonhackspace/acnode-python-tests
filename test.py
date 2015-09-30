@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-import unittest, MySQLdb, time, urllib2, json, os, sys
+import unittest, MySQLdb, time, urllib2, json, os, sys, subprocess
 from acnode import ACNode, Card
 import test_config
 
@@ -71,6 +71,9 @@ class AcnodeTests(unittest.TestCase):
       # make the temp card a maintainer
       cur.execute("insert into permissions (tool_id, user_id, permission, added_on) VALUES (1, 5, 2, NOW());")
 
+      # make user 4 a user
+      cur.execute("insert into permissions (tool_id, user_id, permission, added_on) VALUES (1, 4, 1, NOW());")
+
       db.commit()
       db.close()
     elif test_config.TESTMODE == "django":
@@ -122,9 +125,11 @@ class AcnodeTests(unittest.TestCase):
       # make the android tag a user
       p = Permissions(user=User.objects.get(pk=8), permission=1, tool=Tool.objects.get(pk=1))
       p.save()
-
       # make the temp card a maintainer
       p = Permissions(user=User.objects.get(pk=5), permission=2, tool=Tool.objects.get(pk=1))
+      p.save()
+      # make user 4 a user
+      p = Permissions(user=User.objects.get(pk=4), permission=1, tool=Tool.objects.get(pk=1))
       p.save()
 
     self.node = ACNode(1, test_config.ACNODE_ACSERVER_HOST, test_config.ACNODE_ACSERVER_PORT)
@@ -149,6 +154,10 @@ class AcnodeTests(unittest.TestCase):
     # card exists and is not a user for this tool
     self.failUnless(self.node.querycard(self.user3) == 0)
   
+  def test_user_and_not_subscribed(self):
+    # card exists and is a user for this tool, but is not subscribed
+    self.failUnless(self.node.querycard(self.user4) == -1)
+
   def test_maintainer(self):
     # is a maintainer for this tool
     self.failUnless(self.node.querycard(self.user1a) == 2)
@@ -313,6 +322,107 @@ class AcnodeTests(unittest.TestCase):
       self.failUnless(ret == "something")
     except urllib2.HTTPError, e:
       self.failUnless(str(e).startswith('HTTP Error 401'))
+
+class DbUpdateTests(unittest.TestCase):
+  # assumes 0_carddb.json is already loaded
+
+  user3  = Card(0x33333333, False, True)
+  user3a = Card(0x33333300, False, True)
+  user4  = Card(0x44444444, False, True)
+
+  djpath = None
+
+  def setUp(self):
+    if test_config.TESTMODE == "php":
+      db = MySQLdb.connect(host=test_config.MYSQL_HOST,
+                           user=test_config.MYSQL_USER,
+                           passwd=test_config.MYSQL_PASS,
+                           db=test_config.MYSQL_DB)
+      cur = db.cursor()
+      cur.execute("DELETE FROM permissions;")
+      cur.execute("DELETE FROM acnodes;")
+      cur.execute("DELETE FROM toolusage;")
+      cur.execute("DELETE FROM tools;")
+
+      # we need a tool to test with
+      cur.execute("insert into tools (tool_id, name, status, status_message) VALUES (1, 'test_tool', 1, 'working ok');")
+
+      # and now an acnode for our tool
+      cur.execute("insert into acnodes (acnode_id, unique_identifier, shared_secret, tool_id) VALUES (1, '1', '1', 1);")
+
+      # make user 4 a user
+      cur.execute("insert into permissions (tool_id, user_id, permission, added_on) VALUES (1, 3, 1, NOW());")
+      db.commit()
+      db.close()
+    elif test_config.TESTMODE == "django":
+      os.environ['DJANGO_SETTINGS_MODULE'] = 'acserver.settings'
+      import django
+      djpath = os.path.dirname(os.path.dirname(os.path.abspath(__file__))) + os.path.sep + "acserver-django"
+      if os.path.exists(djpath):
+        sys.path.append(djpath)
+        self.djpath = djpath
+      else:
+        if test_config.ACNODE_ACSERVER_DJANGO:
+          sys.path.append(test_config.ACNODE_ACSERVER_DJANGO)
+          self.djpath = test_config.ACNODE_ACSERVER_DJANGO
+        else:
+          raise RunTimeException("you need to put acserver-django on your python path somehow, bodge this here.")
+      from server.models import Tool, Card, User, Permissions
+      from django.core.exceptions import ObjectDoesNotExist
+
+      django.setup()
+      try:
+        t = Tool.objects.get(id=1)
+        t.delete()
+        t = None
+      except ObjectDoesNotExist, e:
+        pass
+
+      t = Tool(id=1, name='test_tool', status=1, status_message='working ok')
+      t.save()
+      # clean permissions first
+      ps = Permissions.objects.all()
+      for p in ps:
+        p.delete()
+        p = None
+      # make user 3 a user
+      p = Permissions(user=User.objects.get(pk=3), permission=1, tool=Tool.objects.get(pk=1))
+      p.save()
+
+    self.node = ACNode(1, test_config.ACNODE_ACSERVER_HOST, test_config.ACNODE_ACSERVER_PORT)
+
+  def update_carddb(self, file):
+    if test_config.TESTMODE == "php":
+      raise RunTimeError("Please implement php mode")
+    elif test_config.TESTMODE == "django":
+      update = [self.djpath + os.path.sep + "manage.py", "updatecarddb", file]
+      subprocess.call(update)
+
+  def test_start(self):
+    # card exists and is a user for this tool
+    self.failUnless(self.node.querycard(self.user3) == 1)
+    # this card does not exist yet
+    self.failUnless(self.node.querycard(self.user3a) == -1)
+
+  def test_cardb_updates(self):
+    # this card does not exist yet
+    self.failUnless(self.node.querycard(self.user3a) == -1)
+    self.update_carddb("1_card_added_carddb.json")
+    # should exist now
+    self.failUnless(self.node.querycard(self.user3a) == 1)
+    self.update_carddb("2_card_removed_carddb.json")
+    # and now it's gone
+    self.failUnless(self.node.querycard(self.user3a) == -1)
+    # user3 should be ok
+    self.failUnless(self.node.querycard(self.user3) == 1)
+    # un subscribe them
+    self.update_carddb("3_user_unsubscribed_carddb.json")
+    # and now they don't work
+    self.failUnless(self.node.querycard(self.user3) == -1)
+    # re-subscribe them
+    self.update_carddb("4_user_subscribed_carddb.json")
+    # and now they should work
+    self.failUnless(self.node.querycard(self.user3) == 1)
 
 if __name__ == '__main__':
   unittest.main()
