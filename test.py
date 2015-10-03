@@ -71,8 +71,8 @@ class AcnodeTests(unittest.TestCase):
       # make the temp card a maintainer
       cur.execute("insert into permissions (tool_id, user_id, permission, added_on) VALUES (1, 5, 2, NOW());")
 
-      # make user 4 a user
-      cur.execute("insert into permissions (tool_id, user_id, permission, added_on) VALUES (1, 4, 1, NOW());")
+      # make user 4 a maintainer
+      cur.execute("insert into permissions (tool_id, user_id, permission, added_on) VALUES (1, 4, 2, NOW());")
 
       db.commit()
       db.close()
@@ -117,19 +117,19 @@ class AcnodeTests(unittest.TestCase):
         p = None
 
       # user 2 is a user
-      p = Permissions(user=User.objects.get(pk=2), permission=1, tool=Tool.objects.get(pk=1))
+      p = Permissions(user=User.objects.get(pk=2), permission=1, tool=Tool.objects.get(pk=1), addedby=User.objects.get(pk=1))
       p.save()
       # user 1 is a maintainer
-      p = Permissions(user=User.objects.get(pk=1), permission=2, tool=Tool.objects.get(pk=1))
+      p = Permissions(user=User.objects.get(pk=1), permission=2, tool=Tool.objects.get(pk=1), addedby=User.objects.get(pk=1))
       p.save()
       # make the android tag a user
-      p = Permissions(user=User.objects.get(pk=8), permission=1, tool=Tool.objects.get(pk=1))
+      p = Permissions(user=User.objects.get(pk=8), permission=1, tool=Tool.objects.get(pk=1), addedby=User.objects.get(pk=1))
       p.save()
       # make the temp card a maintainer
-      p = Permissions(user=User.objects.get(pk=5), permission=2, tool=Tool.objects.get(pk=1))
+      p = Permissions(user=User.objects.get(pk=5), permission=2, tool=Tool.objects.get(pk=1), addedby=User.objects.get(pk=1))
       p.save()
-      # make user 4 a user
-      p = Permissions(user=User.objects.get(pk=4), permission=1, tool=Tool.objects.get(pk=1))
+      # make user 4 a maintainer
+      p = Permissions(user=User.objects.get(pk=4), permission=2, tool=Tool.objects.get(pk=1), addedby=User.objects.get(pk=1))
       p.save()
 
     self.node = ACNode(1, test_config.ACNODE_ACSERVER_HOST, test_config.ACNODE_ACSERVER_PORT)
@@ -187,6 +187,16 @@ class AcnodeTests(unittest.TestCase):
   def test_unknown_user_adds_a_card(self):
     # unknown user tries to add a card
     self.failUnless(self.node.addNewUser(self.user3, self.user_does_not_exist) == 0)
+
+  def test_noperms_user_adds_a_card(self):
+    # known user with no perms for this tool tries to add a card
+    self.failUnless(self.node.addNewUser(self.user3, self.user3) == 0)
+
+  def test_unsubscribed_maintainer_adds_a_card(self):
+    self.failUnless(self.node.addNewUser(self.user3, self.user4) == 0)
+
+  def test_user_already_has_perms(self):
+    self.failUnless(self.node.addNewUser(self.user2, self.user1a) == 1)
 
   def test_using_acnode(self):
     self.failUnless(self.node.reportToolUse(self.user2, 1) == 1)
@@ -386,7 +396,7 @@ class DbUpdateTests(unittest.TestCase):
         p.delete()
         p = None
       # make user 3 a user
-      p = Permissions(user=User.objects.get(pk=3), permission=1, tool=Tool.objects.get(pk=1))
+      p = Permissions(user=User.objects.get(pk=3), permission=1, tool=Tool.objects.get(pk=1), addedby=User.objects.get(pk=1))
       p.save()
 
     self.node = ACNode(1, test_config.ACNODE_ACSERVER_HOST, test_config.ACNODE_ACSERVER_PORT)
