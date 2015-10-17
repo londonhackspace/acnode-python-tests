@@ -434,6 +434,92 @@ class DbUpdateTests(unittest.TestCase):
     # and now they should work
     self.failUnless(self.node.querycard(self.user3) == 1)
 
+
+class SecretTests(unittest.TestCase):
+  # assumes 0_carddb.json is already loaded
+
+  user3  = Card(0x33333333, False, True)
+  user3a = Card(0x33333300, False, True)
+  user4  = Card(0x44444444, False, True)
+
+  djpath = None
+
+  def setUp(self):
+    if test_config.TESTMODE == "php":
+      raise RunTimeError("only the django server supports secret key thingys")
+    elif test_config.TESTMODE == "django":
+      os.environ['DJANGO_SETTINGS_MODULE'] = 'acserver.settings'
+      import django
+      djpath = os.path.dirname(os.path.dirname(os.path.abspath(__file__))) + os.path.sep + "acserver-django"
+      if os.path.exists(djpath):
+        sys.path.append(djpath)
+        self.djpath = djpath
+      else:
+        if test_config.ACNODE_ACSERVER_DJANGO:
+          sys.path.append(test_config.ACNODE_ACSERVER_DJANGO)
+          self.djpath = test_config.ACNODE_ACSERVER_DJANGO
+        else:
+          raise RunTimeException("you need to put acserver-django on your python path somehow, bodge this here.")
+      from server.models import Tool, Card, User, Permissions
+      from django.core.exceptions import ObjectDoesNotExist
+
+      django.setup()
+      try:
+        t = Tool.objects.get(id=1)
+        t.delete()
+        t = None
+        t = Tool.objects.get(id=2)
+        t.delete()
+        t = None
+      except ObjectDoesNotExist, e:
+        pass
+
+      t = Tool(id=1, name='test_tool', status=1, status_message='working ok')
+      t.save()
+      t = Tool(id=2, name='test_tool_with_secret', status=1, status_message='working ok', secret='12345678')
+      t.save()
+      # clean permissions first
+      ps = Permissions.objects.all()
+      for p in ps:
+        p.delete()
+        p = None
+      # make user 3 a user for tool 1
+      p = Permissions(user=User.objects.get(pk=3), permission=1, tool=Tool.objects.get(pk=1), addedby=User.objects.get(pk=1))
+      p.save()
+      # and 2
+      p = Permissions(user=User.objects.get(pk=3), permission=1, tool=Tool.objects.get(pk=2), addedby=User.objects.get(pk=1))
+      p.save()
+
+    self.node = ACNode(1, test_config.ACNODE_ACSERVER_HOST, test_config.ACNODE_ACSERVER_PORT)
+    self.node_one_with_secret = ACNode(1, test_config.ACNODE_ACSERVER_HOST, test_config.ACNODE_ACSERVER_PORT, secret='abcdefgh')
+    self.secret_node = ACNode(2, test_config.ACNODE_ACSERVER_HOST, test_config.ACNODE_ACSERVER_PORT, secret='12345678')
+    self.missing_secret_node = ACNode(2, test_config.ACNODE_ACSERVER_HOST, test_config.ACNODE_ACSERVER_PORT)
+    self.wrong_secret_node = ACNode(2, test_config.ACNODE_ACSERVER_HOST, test_config.ACNODE_ACSERVER_PORT, secret='xxxxxxxx')
+
+  def test_start(self):
+    # card exists and is a user for this tool
+    self.failUnless(self.node.querycard(self.user3) == 1)
+    # this card does not exist yet
+    self.failUnless(self.node.querycard(self.user3a) == -1)
+
+    # card exists and is a user for this tool
+    self.failUnless(self.secret_node.querycard(self.user3) == 1)
+    # this card does not exist yet
+    self.failUnless(self.secret_node.querycard(self.user3a) == -1)
+
+  def test_node_missing_secret(self):
+    # card exists and is a user for this tool
+    # but the secret is missing now so it will fail
+    self.failUnless(self.missing_secret_node.querycard(self.user3) == 0)
+
+  def test_Server_missing_secret(self):
+    # we are sending an unexpected secret. the server should accept it (and log it)
+    self.failUnless(self.node_one_with_secret.querycard(self.user3) == 1)
+
+  def test_wrong_secret(self):
+    # we are sending the wrong secret, so should be refused
+    self.failUnless(self.wrong_secret_node.querycard(self.user3) == 0)
+
 if __name__ == '__main__':
   unittest.main()
 #  suite = unittest.TestLoader().loadTestsFromTestCase(AcnodeTests)

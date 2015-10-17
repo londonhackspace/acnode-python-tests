@@ -32,12 +32,13 @@ class Card:
       return "%014x" % (self.uid)
 
 class ACNode:
-  def __init__(self, nodeid, servername, port, verbose=False):
+  def __init__(self, nodeid, servername, port, verbose=False, secret=None):
     self.nodeid = nodeid
     self.servername = servername
     self.port = port
     self.status = 1
     self.verbose = verbose
+    self.secret = secret
 
     ret = self.networkCheckToolStatus()
     if ret != -1:
@@ -91,6 +92,8 @@ class ACNode:
     c.send(" HTTP/1.0\n")
     c.send("Host: ")
     c.send(self.servername+"\n");
+    if self.secret != None:
+      c.send("X-AC-Key: " + self.secret + "\n")
     c.send("\n")
 
 # timeout if not response after 10 secs
